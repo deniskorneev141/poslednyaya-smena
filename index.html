@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#eef7fb"><meta name="description" content="Последняя смена — интерактивная история с выбором.">
+  <title>Последняя смена</title><link rel="icon" href="logo.svg" type="image/svg+xml"><link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="splash" id="splash" aria-hidden="true"><div class="splash-content"><span class="splash-label">ИНТЕРАКТИВНАЯ ИСТОРИЯ</span><div class="splash-writing"><span>Последняя смена</span></div><div class="splash-line"></div></div></div>
+<div class="app">
+  <header class="topbar"><a class="brand" href="#home" aria-label="Последняя смена — на главную"><img src="logo.svg" alt=""><span>последняя<br><strong>смена</strong></span></a><div class="top-actions"><span id="account-name" class="account-name" hidden></span><button id="account-exit" class="account-exit" hidden>Выйти</button><div class="balance" aria-label="Баланс: 0 искорок"><span>✦</span><strong>0</strong></div><button class="settings" id="open-dev" aria-label="Меню разработчика" title="Меню разработчика">⚙</button></div></header>
+  <main id="home">
+    <div class="intro"><p class="eyebrow">ТВОЯ ИСТОРИЯ НАЧИНАЕТСЯ ЗДЕСЬ</p><h1>Последняя<br><em>смена.</em></h1><p>У каждой истории есть начало.<br>Выбери раздел, чтобы узнать больше.</p></div>
+    <section aria-labelledby="sections-title"><div class="section-heading"><div><p class="eyebrow">ВЫБЕРИ ИСТОРИЮ</p><h2 id="sections-title">Разделы</h2></div><span class="section-count">01</span></div>
+      <div id="catalog"><p class="catalog-empty">Истории скоро появятся.</p></div>
+    </section>
+    <footer>ПОСЛЕДНЯЯ СМЕНА <span>✦</span></footer>
+  </main>
+</div>
+<dialog id="dev-dialog"><div class="dialog-head"><div><p class="eyebrow">НАСТРОЙКИ</p><h2>Меню разработчика</h2></div><button class="close" id="close-dev" aria-label="Закрыть">×</button></div><div id="login-panel"><p class="dialog-copy">Введите код доступа.</p><form id="login-form"><label for="password">Код доступа</label><input id="password" type="password" inputmode="numeric" autocomplete="off" required placeholder="••••"><p id="login-error" class="error" role="alert"></p><button class="primary" type="submit">Войти</button></form><p class="notice">Это демонстрационное меню. Код на статическом сайте не защищает данные.</p></div><div id="dev-panel" hidden><p class="dialog-copy">Создавайте истории, главы, сцены и персонажей в редакторе.</p><a class="primary editor-link" href="editor.html">Открыть редактор →</a><p class="notice">Для настоящего доступа потребуется серверная авторизация.</p><div class="pending-panel"><h3>Заявки пользователей</h3><button type="button" id="load-pending" class="primary wide">Показать заявки</button><div id="pending-users"></div></div><button id="logout" class="text-button">Выйти</button></div></dialog>
+<dialog id="account-dialog"><div class="account-head"><p class="eyebrow">ПОСЛЕДНЯЯ СМЕНА</p><h2 id="account-title">Вход в игру</h2><p>Введите логин и пароль.</p></div><form id="account-form"><label for="account-login">Логин</label><input id="account-login" autocomplete="username" required><label for="account-password">Пароль</label><input id="account-password" type="password" autocomplete="current-password" required><div id="account-telegram-wrap" hidden><label for="account-telegram">Тег в Telegram</label><input id="account-telegram" placeholder="@username"></div><p id="account-message" class="error" role="status"></p><button id="account-submit" class="primary wide" type="submit">Войти</button></form><button id="account-switch" class="text-button account-switch" type="button">Создать аккаунт</button></dialog>
+<script src="friend-auth.js"></script>
+<script src="published-catalog.js"></script>
+<script src="app.js"></script>
+</body></html>
