@@ -1,0 +1,45 @@
+'use strict';
+// Токен живёт только в поле диалога, а обновление ветки выполняется одним коммитом.
+(()=>{
+ const dialog=document.querySelector('#github-dialog'),form=document.querySelector('#github-form'),status=document.querySelector('#github-status'),tokenField=document.querySelector('#github-token'),submit=document.querySelector('#github-submit');
+ const report=text=>{status.textContent=text};let mode='chapter';
+ function openPublisher(kind){mode=kind;report('');tokenField.value='';document.querySelector('#github-dialog-title').textContent=kind==='map'?'Применить доступность на сайте':'Отправить главу на сайт';document.querySelector('#github-dialog-description').textContent=kind==='map'?'Настройки опубликованных глав будут обновлены одним коммитом. Изменения появятся после сборки GitHub Pages.':'Выбранная глава и её изображения будут добавлены одним коммитом. GitHub Pages обновит сайт автоматически.';submit.textContent=kind==='map'?'Отправить настройки':'Отправить главу';dialog.showModal()}
+ document.querySelector('#chapter-map-github').onclick=()=>{if(!data.sections.length)return alert('Сначала откройте главы игры в редакторе.');document.querySelector('#chapter-map-dialog').close();openPublisher('map')};
+ document.querySelector('#github-publish').onclick=()=>{if(!section()||!chapter())return alert('Сначала выберите раздел и главу.');if(!chapter().scenes?.length)return alert('Добавьте хотя бы одну сцену.');openPublisher('chapter')};
+ dialog.addEventListener('close',()=>{tokenField.value=''});
+ const utf8base64=bytes=>{let value='';for(let i=0;i<bytes.length;i+=32768)value+=String.fromCharCode(...bytes.subarray(i,i+32768));return btoa(value)};
+ const sha256=async bytes=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),x=>x.toString(16).padStart(2,'0')).join('');
+ const decode64=value=>new TextDecoder().decode(Uint8Array.from(atob(value.replace(/\s/g,'')),c=>c.charCodeAt(0)));
+ form.onsubmit=async e=>{e.preventDefault();if(!crypto.subtle){report('Откройте редактор через HTTPS или localhost: браузеру нужен защищённый контекст.');return}
+ const repo=document.querySelector('#github-repository').value.trim(),branch=document.querySelector('#github-branch').value.trim(),token=tokenField.value.trim();if(!/^[\w.-]+\/[\w.-]+$/.test(repo)||!branch||!token){report('Проверьте репозиторий, ветку и токен.');return}
+ let selectedChapter=null,update=null;
+ if(mode==='chapter'){
+ const selectedSection=structuredClone(section()); selectedChapter=structuredClone(chapter());if(!selectedChapter?.scenes?.length){report('В главе нет сцен.');return}selectedSection.chapters=[selectedChapter];
+ const ids={characters:new Set(),backgrounds:new Set(),stats:new Set()};for(const scene of selectedChapter.scenes){if(scene.backgroundId)ids.backgrounds.add(scene.backgroundId);if(scene.characterId)ids.characters.add(scene.characterId);if(scene.route?.statId)ids.stats.add(scene.route.statId);for(const line of scene.lines||[])if(line.characterId)ids.characters.add(line.characterId);for(const choice of scene.choices||[]){if(choice.statId)ids.stats.add(choice.statId);if(choice.extraStatId)ids.stats.add(choice.extraStatId);if(choice.condition?.statId)ids.stats.add(choice.condition.statId);if(choice.requirement?.statId)ids.stats.add(choice.requirement.statId)}}
+ update={version:1,sections:[selectedSection]};for(const kind of Object.keys(ids))update[kind]=structuredClone(data[kind].filter(item=>ids[kind].has(item.id)));
+ }
+ submit.disabled=true;const api=`https://api.github.com/repos/${repo}`;
+ async function request(path,options={}){const response=await fetch(api+path,{...options,headers:{Accept:'application/vnd.github+json',Authorization:`Bearer ${token}`,'X-GitHub-Api-Version':'2022-11-28',...(options.body?{'Content-Type':'application/json'}:{})}});if(!response.ok){let message='';try{message=(await response.json()).message||''}catch{}throw Error(`GitHub: ${response.status} ${message}`)}return response.json()}
+ try{
+  report('Проверяем репозиторий…');const ref=await request('/git/ref/heads/'+encodeURIComponent(branch)),head=ref.object.sha,commit=await request('/git/commits/'+head);
+  let remote;try{const file=await request('/contents/published-catalog.js?ref='+encodeURIComponent(head));if(file.encoding!=='base64'||!file.content)throw Error('Каталог слишком большой для чтения через GitHub API');const source=decode64(file.content),match=source.match(/^\s*(?:\/\/[^\n]*\n\s*)*window\.PUBLISHED_STORIES\s*=\s*([\s\S]*?)\s*;\s*$/);if(!match)throw Error('Не удалось прочитать существующий каталог');remote=JSON.parse(match[1])}catch(err){if(String(err.message).includes('GitHub: 404'))remote={version:1,sections:[],characters:[],backgrounds:[],stats:[]};else throw err}
+  const files=new Map(),memo=new Map();let count=0;
+  async function convertImage(value){if(!value||typeof value!=='string'||/^https?:\/\//i.test(value))return value;if(memo.has(value))return memo.get(value);let blob;if(value.startsWith('data:image/'))blob=await (await fetch(value)).blob();else if(value.startsWith('assets/')||value.startsWith('story-assets/')){const response=await fetch(value);if(!response.ok)throw Error('Не найдено изображение: '+value);blob=await response.blob()}else throw Error('Неподдерживаемый путь изображения: '+value.slice(0,80));const ext={'image/png':'png','image/jpeg':'jpg','image/webp':'webp','image/gif':'gif'}[blob.type];if(!ext)throw Error('Неподдерживаемый формат изображения: '+blob.type);const bytes=new Uint8Array(await blob.arrayBuffer()),name='story-assets/'+await sha256(bytes)+'.'+ext;files.set(name,bytes);memo.set(value,name);return name}
+  async function convert(value){if(Array.isArray(value)){for(let i=0;i<value.length;i++)value[i]=await convert(value[i]);return value}if(value&&typeof value==='object'){for(const key of Object.keys(value))value[key]=key==='image'?await convertImage(value[key]):await convert(value[key])}return value}
+  let merged;
+  if(mode==='chapter'){
+   const targetSection=update.sections[0],sameSection=(remote.sections||[]).find(s=>s.name===targetSection.name&&s.id!==targetSection.id);if(sameSection)throw Error('Раздел с таким названием уже есть на сайте, но его идентификатор отличается. Откройте главы игры перед импортом, чтобы не создать дубликат');const sameChapter=(remote.sections||[]).flatMap(s=>s.chapters||[]).find(c=>c.name===selectedChapter.name&&c.id!==selectedChapter.id);if(sameChapter)throw Error('Глава с таким названием уже есть на сайте, но её идентификатор отличается. Откройте опубликованную главу и измените её вместо повторного импорта');
+   report('Подготавливаем изображения…');await convert(update);const ch=update.sections[0].chapters[0],story={id:ch.id,scenes:ch.scenes};const storyText=JSON.stringify(story).replace(/</g,'\\u003c'),storyName='story-chapters/'+(await sha256(new TextEncoder().encode(storyText))).slice(0,24)+'.js';files.set(storyName,new TextEncoder().encode('window.STORY_CHAPTERS=window.STORY_CHAPTERS||{};window.STORY_CHAPTERS['+JSON.stringify(ch.id)+']='+storyText+';\n'));delete ch.scenes;ch.storyFile=storyName;
+   merged=combinePublic(remote,update);
+  }else{
+   merged=structuredClone(remote);const byId=new Map(data.sections.flatMap(s=>(s.chapters||[])).map(ch=>[ch.id,ch]));const published=merged.sections.flatMap(s=>s.chapters||[]);let updated=0;
+   for(const ch of published){const local=byId.get(ch.id);if(local){ch.status=local.status;ch.unlockMode=local.unlockMode||'previous';updated++}else if(data.sections.some(s=>(s.chapters||[]).some(c=>c.name===ch.name)))throw Error('Идентификаторы глав не совпадают. Откройте опубликованные главы в редакторе и измените их настройки');}
+   if(!updated)throw Error('В редакторе нет глав с идентификаторами опубликованного сайта. Откройте главы игры в редакторе');
+  }
+  files.set('published-catalog.js',new TextEncoder().encode('window.PUBLISHED_STORIES = '+JSON.stringify(merged).replace(/</g,'\\u003c')+';\n'));
+  const tree=[];for(const [path,bytes] of files){report(`Отправляем файлы: ${++count} из ${files.size}…`);const blob=await request('/git/blobs',{method:'POST',body:JSON.stringify({content:utf8base64(bytes),encoding:'base64'})});tree.push({path,mode:'100644',type:'blob',sha:blob.sha})}
+  report('Создаём коммит…');const newTree=await request('/git/trees',{method:'POST',body:JSON.stringify({base_tree:commit.tree.sha,tree})});const newCommit=await request('/git/commits',{method:'POST',body:JSON.stringify({message:mode==='map'?'Обновить доступность глав':'Опубликовать главу: '+selectedChapter.name,tree:newTree.sha,parents:[head]})});await request('/git/refs/heads/'+encodeURIComponent(branch),{method:'PATCH',body:JSON.stringify({sha:newCommit.sha,force:false})});
+  tokenField.value='';report(mode==='map'?'Готово! Доступность отправлена на GitHub. Сайт обновится после сборки GitHub Pages.':'Готово! Глава отправлена на GitHub. Сайт обновится после сборки GitHub Pages.');
+ }catch(err){console.error(err);report('Не удалось опубликовать: '+err.message+'. Проверьте токен и права; если ветка изменилась, повторите попытку.')}finally{submit.disabled=false}
+ };
+})();
